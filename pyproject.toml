@@ -1,0 +1,77 @@
+[project]
+name = "httpx-curl_cffi"
+version = "0.1.0"
+description = "httpx transport for curl_cffi (python bindings for curl-impersonate)"
+authors = [{ name = "Victor Gavro", email = "vgavro@gmail.com" }]
+license = { text = "BSD-3-Clause" } # https://spdx.org/licenses/BSD-3-Clause.html
+license-files = ["LICENSE"]
+readme = "README.md"
+classifiers = [
+  # based on https://github.com/encode/httpx/blob/master/pyproject.toml
+  # (without Trio and Python < 3.10)
+  "Development Status :: 4 - Beta",
+  "Environment :: Web Environment",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP",
+]
+
+dependencies = [
+  # versions may be lowered, tests needed
+  "curl_cffi>=0.7.4",
+  "httpx>=0.28.1",
+]
+requires-python = ">=3.10"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.14.1",
+  "ruff>=0.9.1",
+  "pre-commit>=3.6.0",
+
+  "pytest>=7.4.4",
+  "pytest-mock>=3.12.0",
+  "pytest-asyncio>=0.23.3",
+  # debug
+  "ipdb>=0.13.13",
+]
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "TRY003", # https://docs.astral.sh/ruff/rules/raise-vanilla-args/
+  "EM101",  # https://docs.astral.sh/ruff/rules/raw-string-in-exception/
+  "D",      # docstrings
+  "TD",     # todo should contain author, link, etc
+  "FIX002", # todo should be resolved
+  "S101",   # disallow usage of assert
+  "ERA001", # commented-out code
+]
+
+[tool.pytest.ini_options]
+# https://docs.pytest.org/en/stable/reference/customize.html#pyproject-toml
+addopts = "--asyncio-mode=auto"
+testpaths = ["tests"]
+filterwarnings = [
+  # https://docs.pytest.org/en/latest/how-to/capture-warnings.html
+  # https://docs.python.org/3/library/warnings.html#warning-filter
+  "error",
+]
+
+[tool.mypy]
+plugins = []
+check_untyped_defs = true
+
+[tool.pdm.scripts]
+test = { shell = "pytest" }
+
+[tool.setuptools]
+packages = ["httpx_curl_cffi"]

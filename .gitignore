@@ -1,0 +1,6 @@
+# Local
+.pdm-python
+
+# Temporary files
+__pycache__/
+*.egg-info/
