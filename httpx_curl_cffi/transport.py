@@ -252,11 +252,7 @@ class BaseCurlTransport:
         resp = httpx.Response(
             status_code=_resp.status_code,
             request=req,
-            headers={
-                k: v
-                for k, v in _resp.headers.items()
-                if k.lower() not in ["content-encoding", "transfer-encoding"]
-            },
+            headers=[(k, v) for k, v in _resp.headers.raw],
             stream=self._stream_wrap_cls(_resp),
             extensions={
                 "curl": {
@@ -265,12 +261,11 @@ class BaseCurlTransport:
                 },
             },
         )
-        # restore original headers, we need to skip them above
-        # because httpx is trying to decompress content if headers were
-        # provided in __init__, but it's already decompressed by curl,
-        # note that curl interfrace doesn't provide raw content at all.
+        # disable decompressing content based on `content-encoding` header,
+        # it's already decompressed by curl and curl interfrace
+        # doesn't provide raw content at all.
         # https://github.com/lexiforest/curl_cffi/issues/438
-        resp.headers = httpx.Headers(_resp.headers.raw)
+        resp._decoder = httpx._decoders.IdentityDecoder()  # noqa:SLF001
 
         # there is no actual reason in HTTP/2 and HTTP/3
         if _resp.reason:
