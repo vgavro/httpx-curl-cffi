@@ -1,9 +1,10 @@
 [project]
-name = "httpx-curl_cffi"
-version = "0.1.0"
+name = "httpx-curl-cffi"
+version = "0.1.1"
 description = "httpx transport for curl_cffi (python bindings for curl-impersonate)"
 authors = [{ name = "Victor Gavro", email = "vgavro@gmail.com" }]
-license = { text = "BSD-3-Clause" } # https://spdx.org/licenses/BSD-3-Clause.html
+# https://spdx.org/licenses/BSD-3-Clause.html
+license = "BSD-3-Clause"
 license-files = ["LICENSE"]
 readme = "README.md"
 classifiers = [
@@ -13,7 +14,10 @@ classifiers = [
   "Environment :: Web Environment",
   "Framework :: AsyncIO",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: BSD License",
+  # pdm.backend.exceptions.ValidationError:
+  # project.license: Setting "project.license" to an SPDX license expression
+  # is not compatible with 'License ::' classifiers
+  # "License :: OSI Approved :: BSD License",
   "Operating System :: OS Independent",
   "Typing :: Typed",
   "Programming Language :: Python :: 3",
@@ -26,11 +30,15 @@ classifiers = [
 ]
 
 dependencies = [
-  # versions may be lowered, tests needed
-  "curl_cffi>=0.7.4",
+  "curl-cffi>=0.7.0",
+  # httpx version may be lowered, tests needed
   "httpx>=0.28.1",
 ]
 requires-python = ">=3.10"
+
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [dependency-groups]
 dev = [
@@ -73,6 +81,3 @@ check_untyped_defs = true
 
 [tool.pdm.scripts]
 test = { shell = "pytest" }
-
-[tool.setuptools]
-packages = ["httpx_curl_cffi"]

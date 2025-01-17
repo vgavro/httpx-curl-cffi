@@ -4,17 +4,23 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import timedelta
 from http.cookiejar import Cookie, CookieJar
 from pathlib import PurePath
-from typing import Any, TypedDict, Unpack
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Generic,
+    TypedDict,
+    TypeVar,
+    Unpack,
+)
 
 import httpx
-from curl_cffi import CurlHttpVersion, CurlInfo, CurlOpt
-from curl_cffi.requests import (
-    BrowserTypeLiteral,
+from curl_cffi import CurlECode, CurlHttpVersion, CurlInfo, CurlOpt
+from curl_cffi.requests import Response as _Response
+from curl_cffi.requests.impersonate import (
     ExtraFingerprints,
     ExtraFpDict,
 )
-from curl_cffi.requests import Response as _Response
-from curl_cffi.requests import exceptions as _exceptions
 from curl_cffi.requests.session import (
     AsyncCurl,
     Curl,
@@ -27,32 +33,53 @@ from curl_cffi.requests.session import (
     BaseSession as _BaseSession,
 )
 from curl_cffi.requests.session import (
-    BaseSessionParams as _BaseSessionParams,
-)
-from curl_cffi.requests.session import (
     Session as _SyncSession,
 )
+from httpx._decoders import IdentityDecoder
+
+if TYPE_CHECKING:
+    from curl_cffi.requests.impersonate import (
+        BrowserTypeLiteral,
+    )
+else:
+    BrowserTypeLiteral = str
+
+if TYPE_CHECKING:
+    from curl_cffi.requests.session import (
+        BaseSessionParams as _BaseSessionParams,
+    )
+else:
+    _BaseSessionParams = dict[str, Any]
+
+if TYPE_CHECKING:
+    from curl_cffi.requests.exceptions import RequestException as _RequestError
+else:
+    try:
+        from curl_cffi.requests.exceptions import RequestException as _RequestError
+    except ImportError:
+        from curl_cffi.requests.errors import RequestsError as _RequestError
+
 
 _HTTPX_DEFAULT_HEADERS: list[tuple[str, str]] = list(
     httpx.Client(trust_env=False).headers.items(),
 )
 
-_ERROR_MAP: dict[
-    type[_exceptions.RequestException],
-    type[httpx.RequestError],
-] = {
-    _exceptions.Timeout: httpx.TimeoutException,
-    _exceptions.ConnectTimeout: httpx.ConnectTimeout,
-    _exceptions.ReadTimeout: httpx.ReadTimeout,
-    _exceptions.ConnectionError: httpx.ConnectError,
-    # We don't need to wrap all errors here,
-    # only Transport-related
-    # TODO: still this list may be incomplete
+_CURL_ERRORS: dict[CurlECode, type[httpx.RequestError]] = {
+    CurlECode.UNSUPPORTED_PROTOCOL: httpx.ProtocolError,
+    CurlECode.COULDNT_CONNECT: httpx.ConnectError,
+    CurlECode.COULDNT_RESOLVE_HOST: httpx.ConnectError,
+    CurlECode.COULDNT_RESOLVE_PROXY: httpx.ProxyError,
+    CurlECode.SSL_CONNECT_ERROR: httpx.ConnectError,
+    CurlECode.READ_ERROR: httpx.ReadError,
+    CurlECode.RECV_ERROR: httpx.ReadError,
+    CurlECode.WRITE_ERROR: httpx.WriteError,
+    CurlECode.BAD_CONTENT_ENCODING: httpx.DecodingError,
+    CurlECode.OPERATION_TIMEDOUT: httpx.TimeoutException,
 }
 
 
 class _DummyCookieJar(CookieJar):
-    def set_cookie(self, _cookie: Cookie) -> None:
+    def set_cookie(self, cookie: Cookie) -> None:  # noqa:ARG002
         return
 
 
@@ -141,10 +168,13 @@ class CurlTransportParams(TypedDict, total=False):
     curl_infos: list[CurlInfo]
 
 
-class BaseCurlTransport:
-    _session_cls: type[_BaseSession]
-    _session: _BaseSession
-    _stream_wrap_cls: type[CurlSyncByteStream | CurlAsyncByteStream]
+SessionT = TypeVar("SessionT", bound=_BaseSession)
+
+
+class BaseCurlTransport(Generic[SessionT]):
+    _session_cls: type[SessionT]
+    _session: SessionT
+    _stream_wrap_cls: ClassVar[type[CurlSyncByteStream | CurlAsyncByteStream]]
 
     @staticmethod
     def _create_session_params(
@@ -242,9 +272,9 @@ class BaseCurlTransport:
         req: httpx.Request,
         _resp: _Response,
     ) -> httpx.Response:
-        # TODO: bug in curl_cffi
-        # especially for cases when _session.default_headers was used,
-        # curl_cffi has always empty headers in `_resp.request.headers`
+        # TODO: curl_cffi has always empty headers in `_resp.request.headers`
+        # https://github.com/lexiforest/curl_cffi/issues/368
+        # especially needed for cases when `_session.default_headers` was used
         if _resp.request and _resp.request.headers:
             req.headers = httpx.Headers(_resp.request.headers.raw)
 
@@ -265,7 +295,7 @@ class BaseCurlTransport:
         # it's already decompressed by curl and curl interfrace
         # doesn't provide raw content at all.
         # https://github.com/lexiforest/curl_cffi/issues/438
-        resp._decoder = httpx._decoders.IdentityDecoder()  # noqa:SLF001
+        resp._decoder = IdentityDecoder()  # noqa:SLF001
 
         # there is no actual reason in HTTP/2 and HTTP/3
         if _resp.reason:
@@ -279,17 +309,16 @@ class BaseCurlTransport:
     def _create_error(
         self,
         req: httpx.Request,
-        exc: _exceptions.RequestException,
+        exc: _RequestError,
     ) -> httpx.RequestError:
-        error_cls = _ERROR_MAP.get(type(exc), httpx.RequestError)
-        # NOTE: we're loosing curl error code here, which in exc.args[1]
-        return error_cls(exc.args[0], request=req)
+        assert exc.code, "Curl error code undefined"
+        # NOTE: we're loosing curl error code here
+        return _CURL_ERRORS.get(exc.code, httpx.RequestError)(exc.args[0], request=req)
 
 
-class CurlTransport(BaseCurlTransport, httpx.BaseTransport):
-    _session_cls: type[_SyncSession] = _SyncSession
-    _session: _SyncSession
-    _stream_wrap_cls: type[CurlSyncByteStream] = CurlSyncByteStream
+class CurlTransport(BaseCurlTransport[_SyncSession], httpx.BaseTransport):
+    _session_cls = _SyncSession
+    _stream_wrap_cls = CurlSyncByteStream
 
     def __init__(
         self,
@@ -306,24 +335,23 @@ class CurlTransport(BaseCurlTransport, httpx.BaseTransport):
             **self._create_session_params(kwargs),
         )
 
-    def handle_request(self, req: httpx.Request) -> httpx.Response:
-        req.read()
+    def handle_request(self, request: httpx.Request) -> httpx.Response:
+        request.read()
         try:
             _resp = self._session.request(
-                **self._create_request_params(req),
+                **self._create_request_params(request),
             )
-            return self._create_response(req, _resp)
-        except _exceptions.RequestException as _exc:
-            raise self._create_error(req, _exc) from _exc
+            return self._create_response(request, _resp)
+        except _RequestError as _exc:
+            raise self._create_error(request, _exc) from _exc
 
     def close(self) -> None:
         self._session.close()
 
 
-class AsyncCurlTransport(BaseCurlTransport, httpx.AsyncBaseTransport):
-    _session_cls: type[_AsyncSession] = _AsyncSession
-    _session: _AsyncSession
-    _stream_wrap_cls: type[CurlAsyncByteStream] = CurlAsyncByteStream
+class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], httpx.AsyncBaseTransport):
+    _session_cls = _AsyncSession
+    _stream_wrap_cls = CurlAsyncByteStream
 
     def __init__(
         self,
@@ -343,15 +371,15 @@ class AsyncCurlTransport(BaseCurlTransport, httpx.AsyncBaseTransport):
             **self._create_session_params(kwargs),
         )
 
-    async def handle_async_request(self, req: httpx.Request) -> httpx.Response:
-        await req.aread()
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        await request.aread()
         try:
             _resp = await self._session.request(
-                **self._create_request_params(req),
+                **self._create_request_params(request),
             )
-            return self._create_response(req, _resp)
-        except _exceptions.RequestException as _exc:
-            raise self._create_error(req, _exc) from _exc
+            return self._create_response(request, _resp)
+        except _RequestError as _exc:
+            raise self._create_error(request, _exc) from _exc
 
     async def aclose(self) -> None:
         await self._session.close()

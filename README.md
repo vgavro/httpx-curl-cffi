@@ -1,23 +1,25 @@
-# httpx-curl_cffi
+# httpx-curl-cffi
 
 [httpx](https://github.com/encode/httpx) transport for
 [curl_cffi](https://github.com/lexiforest/curl_cffi) -
-python binding for [curl-impersonate-fork](https://github.com/lexiforest/curl-impersonate)
+python binding for [curl-impersonate fork](https://github.com/lexiforest/curl-impersonate)
 
 Unlike other pure python http clients
 like `httpx` (with **native** transport) or `requests`,
 `curl_cffi` can impersonate browser's TLS/JA3 and HTTP/2 fingerprints.
+
 Browser simulation implemented by low-level customizations
 and usage of native browser TLS libraries
 (`BoringSSL` for Chrome, `nss` for Firefox) -
 which is impossible to achieve with Python's `OpenSSL` binding.
+
 If you are blocked by some website for no obvious reason,
 you can give `curl_cffi` a try.
 
 ## Install
 
 ```shell
-pip install httpx-curl_cffi
+pip install httpx-curl-cffi
 ```
 
 ## Usage
@@ -25,6 +27,7 @@ pip install httpx-curl_cffi
 ```python
 from httpx import Client, AsyncClient
 from httpx_curl_cffi import CurlTransport, AsyncCurlTransport, CurlOpt
+
 client = Client(transport=CurlTransport(impersonate="chrome", default_headers=True))
 client.get("https://tools.scrapfly.io/api/fp/ja3")
 
@@ -39,7 +42,6 @@ async_client = AsyncClient(transport=AsyncCurlTransport(
 ## TODO
 
 * Tests
-* Maybe not all errors wrapped with `httpx.RequestError`
 * Better docs?
 * `httpx.Request` content completely read in memory before sending,
   not sure if it's fixable with `curl_cffi` at all
@@ -65,9 +67,16 @@ async_client = AsyncClient(transport=AsyncCurlTransport(
   (because `OpenSSL` is not used)
 * `CurlTransport.trust_env` argument is ignored,
   `libcurl` is always using environment variables for configuration,
-  which is turned-off for proxies using `CurlOpt.NOPROXY` setting,
+  which is disabled for proxies using `CurlOpt.NOPROXY` setting
+  to make `proxy` argument have complete control on proxy usage,
   but may have effect in TLS configuration
   (but may not be used by `curl-impersonate` fork, idk)
+  <https://github.com/lexiforest/curl_cffi/issues/345>
+* `httpx.Response.request.headers` isn't updated with default
+  `curl-impersonate` headers,
+  which can be unexpected on `CurlTransport.default_headers=True`
+  <https://github.com/lexiforest/curl_cffi/issues/368>
+
 * `CurlTransport.cert` argument isn't compatible
   with (deprecated) `httpx._types.CertTypes` -
   impossible to pass password as third tuple element,
