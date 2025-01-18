@@ -39,16 +39,39 @@ async_client = AsyncClient(transport=AsyncCurlTransport(
 ))
 ```
 
+## Proxy from environment variables
+
+Note that `httpx.Client` and `httpx.AsyncClient`
+disables proxy configuration from environment variables
+on providing `transport` argument even with `trust_env=True` (default),
+to have this configured in the same way as native transport use snippet below:
+
+```python
+import httpx
+from httpx._utils import get_environment_proxies
+from httpx_curl_cffi import CurlTransport  # or AsyncCurlTransport
+
+def trasport_factory(proxy: httpx.Proxy | None = None) -> httpx.BaseTransport:
+    return CurlTransport(  # or AsyncCurlTransport
+      proxy=proxy,
+      verify=False,  # and other custom options
+    )
+
+client = httpx.Client(  # or httpx.AsyncClient
+    transport=transport_factory(),
+    mounts={
+        k: transport_factory(httpx.Proxy(url=v)) if v else None
+        for k, v in get_environment_proxies().items()
+    }
+)
+```
+
 ## TODO
 
 * Tests
 * Better docs?
 * `httpx.Request` content completely read in memory before sending,
   not sure if it's fixable with `curl_cffi` at all
-* `httpx.Client.trust_env=True` (default) with `transport` argument
-  is ignored for proxy configuration,
-  proxy `mounts` should be created explicitly from environment variables instead
-  (add example or utility function for this, not to create custom client)
 * `CurlTransport.cert` argument should support in-memory data instead of filenames,
   `pathlib.Path` (instead of strings in `httpx._types.CertTypes`) is forced
 

@@ -1,6 +1,9 @@
 # Local
 .pdm-python
 
+# Build
+/dist
+
 # Temporary files
 __pycache__/
 *.egg-info/

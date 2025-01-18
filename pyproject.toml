@@ -29,12 +29,12 @@ classifiers = [
   "Topic :: Internet :: WWW/HTTP",
 ]
 
-dependencies = [
-  "curl-cffi>=0.7.0",
-  # httpx version may be lowered, tests needed
-  "httpx>=0.28.1",
-]
+dependencies = ["curl-cffi>=0.7.0", "httpx>=0.21.0"]
 requires-python = ">=3.10"
+
+[project.urls]
+Homepage = "https://github.com/vgavro/httpx-curl-cffi"
+Repository = "https://github.com/vgavro/httpx-curl-cffi"
 
 [build-system]
 requires = ["pdm-backend"]
