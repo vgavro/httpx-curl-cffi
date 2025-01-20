@@ -51,7 +51,7 @@ import httpx
 from httpx._utils import get_environment_proxies
 from httpx_curl_cffi import CurlTransport  # or AsyncCurlTransport
 
-def trasport_factory(proxy: httpx.Proxy | None = None) -> httpx.BaseTransport:
+def transport_factory(proxy: httpx.Proxy | None = None) -> httpx.BaseTransport:
     return CurlTransport(  # or AsyncCurlTransport
       proxy=proxy,
       verify=False,  # and other custom options
@@ -68,8 +68,6 @@ client = httpx.Client(  # or httpx.AsyncClient
 
 ## TODO
 
-* Tests
-* Better docs?
 * `httpx.Request` content completely read in memory before sending,
   not sure if it's fixable with `curl_cffi` at all
 * `CurlTransport.cert` argument should support in-memory data instead of filenames,
