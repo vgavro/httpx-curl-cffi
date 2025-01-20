@@ -1,6 +1,6 @@
 [project]
 name = "httpx-curl-cffi"
-version = "0.1.1"
+version = "0.1.2"
 description = "httpx transport for curl_cffi (python bindings for curl-impersonate)"
 authors = [{ name = "Victor Gavro", email = "vgavro@gmail.com" }]
 # https://spdx.org/licenses/BSD-3-Clause.html
