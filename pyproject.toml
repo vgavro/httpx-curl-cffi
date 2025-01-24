@@ -56,19 +56,29 @@ dev = [
 [tool.ruff.lint]
 select = ["ALL"]
 ignore = [
-  "TRY003", # https://docs.astral.sh/ruff/rules/raise-vanilla-args/
-  "EM101",  # https://docs.astral.sh/ruff/rules/raw-string-in-exception/
-  "D",      # docstrings
-  "TD",     # todo should contain author, link, etc
-  "FIX002", # todo should be resolved
-  "S101",   # disallow usage of assert
-  "ERA001", # commented-out code
+  # https://docs.astral.sh/ruff/rules/raise-vanilla-args/
+  "TRY003",
+  # https://docs.astral.sh/ruff/rules/raw-string-in-exception/
+  "EM101",
+  # https://docs.astral.sh/ruff/rules/#pydocstyle-d
+  "D",
+  # https://docs.astral.sh/ruff/rules/#flake8-fixme-fix
+  "FIX",
+  # https://docs.astral.sh/ruff/rules/#flake8-todos-td
+  "TD",
+  # https://docs.astral.sh/ruff/rules/assert/
+  "S101",
+  # https://docs.astral.sh/ruff/rules/any-type/
+  "ANN401",
+  # `Any` in `__exit__` and `__aexit__`
+  # https://docs.astral.sh/ruff/rules/bad-exit-annotation/
+  "PYI036",
 ]
 
 [tool.pytest.ini_options]
 # https://docs.pytest.org/en/stable/reference/customize.html#pyproject-toml
-addopts = "--asyncio-mode=auto"
-asyncio_default_fixture_loop_scope = "session"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function" # default
 testpaths = ["tests"]
 filterwarnings = [
   # https://docs.pytest.org/en/latest/how-to/capture-warnings.html

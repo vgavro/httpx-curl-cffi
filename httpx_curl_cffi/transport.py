@@ -9,6 +9,7 @@ from typing import (
     Any,
     ClassVar,
     Generic,
+    Literal,
     TypedDict,
     TypeVar,
     Unpack,
@@ -42,14 +43,27 @@ if TYPE_CHECKING:
         BrowserTypeLiteral,
     )
 else:
-    BrowserTypeLiteral = str
+    try:
+        from curl_cffi.requests.impersonate import (
+            BrowserTypeLiteral,
+        )
+    except ImportError:
+        # marked to be removed in curl_cffi>=1.0
+        from curl_cffi.requests.impersonate import BrowserType
+
+        BrowserTypeLiteral = Literal[tuple(e.value for e in BrowserType)]
 
 if TYPE_CHECKING:
     from curl_cffi.requests.session import (
         BaseSessionParams as _BaseSessionParams,
     )
 else:
-    _BaseSessionParams = dict[str, Any]
+    try:
+        from curl_cffi.requests.session import (
+            BaseSessionParams as _BaseSessionParams,
+        )
+    except ImportError:
+        _BaseSessionParams = dict[str, Any]
 
 if TYPE_CHECKING:
     from curl_cffi.requests.exceptions import RequestException as _RequestError
@@ -141,7 +155,7 @@ class CurlTransportParams(TypedDict, total=False):
     verify: bool
     # Deprecated with httpx if favor of passing `verify` as `ssl.SSLContext`,
     # in `httpx` it's (certfile, keyfile=None, password=None)
-    # str | tuple[str, str] | tuple[str, str, str]
+    # `str | tuple[str, str] | tuple[str, str, str]`
     # here it's certfile, keyfile without password?
     # TODO: make this in-memory data instead of filenames
     cert: PurePath | tuple[PurePath, PurePath] | None
@@ -217,7 +231,7 @@ class BaseCurlTransport(Generic[SessionT]):
             "debug": params.get("debug", False),
             "proxy": str(proxy.url) if proxy else None,
             "proxy_auth": proxy.auth if proxy and proxy.auth else None,
-            # NOTE: proxy_headers is not currently
+            # NOTE: `proxy_headers` is not currently
             # supported in Session, while it's achievable
             # in `curl-cffi` in general.
             "verify": params.get("verify", True),
@@ -259,7 +273,7 @@ class BaseCurlTransport(Generic[SessionT]):
             "headers": req.headers.raw,
             "timeout": (
                 req.extensions["timeout"]["connect"],
-                # request.extensions["timeout"]["write"] is ignored,
+                # `request.extensions["timeout"]["write"]`` is ignored,
                 # make this write+read sum?
                 req.extensions["timeout"]["read"],
             ),
