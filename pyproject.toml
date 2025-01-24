@@ -1,6 +1,6 @@
 [project]
 name = "httpx-curl-cffi"
-version = "0.1.2"
+dynamic = ["version"]
 description = "httpx transport for curl_cffi (python bindings for curl-impersonate)"
 authors = [{ name = "Victor Gavro", email = "vgavro@gmail.com" }]
 # https://spdx.org/licenses/BSD-3-Clause.html
@@ -29,7 +29,11 @@ classifiers = [
   "Topic :: Internet :: WWW/HTTP",
 ]
 
-dependencies = ["curl-cffi>=0.7.0", "httpx>=0.21.0", "typing-extensions>=4.12.2"]
+dependencies = [
+  "curl-cffi>=0.7.0",
+  "httpx>=0.21.0",
+  "typing-extensions>=4.12.2",
+]
 requires-python = ">=3.10"
 
 [project.urls]
@@ -92,6 +96,9 @@ filterwarnings = [
 [tool.mypy]
 plugins = []
 check_untyped_defs = true
+
+[tool.pdm]
+version = { source = "file", path = "httpx_curl_cffi/__init__.py" }
 
 [tool.pdm.build]
 excludes = ["tests/"]
