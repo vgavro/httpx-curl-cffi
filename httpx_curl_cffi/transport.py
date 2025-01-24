@@ -1,4 +1,5 @@
 import ssl
+import sys
 from asyncio import AbstractEventLoop
 from collections.abc import AsyncIterator, Iterator
 from datetime import timedelta
@@ -12,8 +13,12 @@ from typing import (
     Literal,
     TypedDict,
     TypeVar,
-    Unpack,
 )
+
+if sys.version_info < (3, 11):
+    from typing_extensions import Unpack
+else:
+    from typing import Unpack
 
 import httpx
 from curl_cffi import CurlECode, CurlHttpVersion, CurlInfo, CurlOpt
