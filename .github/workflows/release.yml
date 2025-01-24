@@ -1,0 +1,56 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build:
+    needs: ['test']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pdm-project/setup-pdm@v5
+        with:
+          python-version: 3.11
+          cache: true
+
+      - run: pdm build
+      - uses: actions/upload-artifact@v3
+        with:
+          path: ./dist
+
+  release:
+    needs: ['build']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v3
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          make_latest: true
+          files: artifact/*
+
+  pypi-publish:
+    needs: ['build']
+    environment:
+      name: publish
+      url: https://pypi.org/p/httpx-curl-cffi
+
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v3
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages_dir: artifact/
