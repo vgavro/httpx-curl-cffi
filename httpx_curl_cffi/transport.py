@@ -117,6 +117,10 @@ class CurlAsyncByteStream(httpx.AsyncByteStream):
         self._resp = resp
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
+        if not self._resp.queue:
+            # stream mode disabled
+            yield self._resp.content
+            return
         async for data in self._resp.aiter_content():
             yield data
 
@@ -131,6 +135,10 @@ class CurlSyncByteStream(httpx.SyncByteStream):
         self._resp = resp
 
     def __iter__(self) -> Iterator[bytes]:
+        if not self._resp.queue:
+            # stream mode disabled
+            yield self._resp.content
+            return
         yield from self._resp.iter_content()
 
     def close(self) -> None:
@@ -203,6 +211,11 @@ class BaseCurlTransport(Generic[SessionT]):
     _session: SessionT
     _stream_wrap_cls: ClassVar[type[CurlSyncByteStream | CurlAsyncByteStream]]
 
+    # Transport API should always return responses in stream mode,
+    # still you may force curl-cffi not to use stream ONLY in case of bugs,
+    # which should be fixed in curl-cffi anyway.
+    _stream_enabled: bool = True
+
     @staticmethod
     def _create_session_params(
         params: CurlTransportParams,
@@ -264,6 +277,10 @@ class BaseCurlTransport(Generic[SessionT]):
             "allow_redirects": False,
         }
 
+    @staticmethod
+    def _create_headers(raw_headers: list[tuple[bytes, bytes | None]]) -> httpx.Headers:
+        return httpx.Headers([(h, v or b"") for h, v in raw_headers])
+
     def _create_request_params(self, req: httpx.Request) -> dict[str, Any]:
         if self._session.default_headers:
             # drop httpx default headers
@@ -291,7 +308,7 @@ class BaseCurlTransport(Generic[SessionT]):
                 req.extensions["timeout"]["read"],
             ),
             "interface": req.extensions.get("local_address"),
-            "stream": True,
+            "stream": self._stream_enabled,
         }
 
     def _create_response(
@@ -303,13 +320,12 @@ class BaseCurlTransport(Generic[SessionT]):
         # https://github.com/lexiforest/curl_cffi/issues/368
         # especially needed for cases when `_session.default_headers` was used
         if _resp.request and _resp.request.headers:
-            req.headers = httpx.Headers(_resp.request.headers.raw)
+            req.headers = self._create_headers(_resp.request.headers.raw)
 
-        assert _resp.queue, "request was called without stream=True"
         resp = httpx.Response(
             status_code=_resp.status_code,
             request=req,
-            headers=[(k, v) for k, v in _resp.headers.raw],
+            headers=self._create_headers(_resp.headers.raw),
             stream=self._stream_wrap_cls(_resp),
             extensions={
                 "curl": {
