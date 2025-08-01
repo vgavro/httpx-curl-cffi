@@ -96,6 +96,14 @@ _CURL_ERRORS: dict[CurlECode, type[httpx.RequestError]] = {
     CurlECode.OPERATION_TIMEDOUT: httpx.TimeoutException,
 }
 
+_CURL_HTTP_VERSIONS: dict[CurlHttpVersion, bytes] = {
+    # string enums compatible with native httpx transports
+    CurlHttpVersion.V1_0: b"HTTP/1.0",
+    CurlHttpVersion.V1_1: b"HTTP/1.1",
+    CurlHttpVersion.V2_0: b"HTTP/2",
+    CurlHttpVersion.V3: b"HTTP/3",
+}
+
 
 class _DummyCookieJar(CookieJar):
     def set_cookie(self, cookie: Cookie) -> None:  # noqa:ARG002
@@ -315,6 +323,10 @@ class BaseCurlTransport(Generic[SessionT]):
         # doesn't provide raw content at all.
         # https://github.com/lexiforest/curl_cffi/issues/438
         resp._decoder = IdentityDecoder()  # noqa:SLF001
+
+        http_version = CurlHttpVersion(_resp.http_version)
+        if http_version in _CURL_HTTP_VERSIONS:
+            resp.extensions["http_version"] = _CURL_HTTP_VERSIONS[http_version]
 
         # there is no actual reason in HTTP/2 and HTTP/3
         if _resp.reason:
