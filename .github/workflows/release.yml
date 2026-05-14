@@ -13,14 +13,18 @@ jobs:
     needs: ["test"]
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 required for uv-dynamic-versioning to read git tags
+      # https://github.com/actions/checkout#fetch-depth
       - uses: actions/checkout@v4
-
-      - uses: pdm-project/setup-pdm@v4
         with:
-          python-version: 3.11
-          cache: true
+          fetch-depth: 0
 
-      - run: pdm build
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+
+      - run: uv build
       - uses: actions/upload-artifact@v4
         with:
           path: ./dist

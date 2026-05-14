@@ -14,10 +14,7 @@ classifiers = [
   "Environment :: Web Environment",
   "Framework :: AsyncIO",
   "Intended Audience :: Developers",
-  # pdm.backend.exceptions.ValidationError:
-  # project.license: Setting "project.license" to an SPDX license expression
-  # is not compatible with 'License ::' classifiers
-  # "License :: OSI Approved :: BSD License",
+  "License :: OSI Approved :: BSD License",
   "Operating System :: OS Independent",
   "Typing :: Typed",
   "Programming Language :: Python :: 3",
@@ -26,6 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Topic :: Internet :: WWW/HTTP",
 ]
 
@@ -40,10 +38,6 @@ requires-python = ">=3.10"
 Homepage = "https://github.com/vgavro/httpx-curl-cffi"
 Repository = "https://github.com/vgavro/httpx-curl-cffi"
 
-[build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
-
 [dependency-groups]
 test = [
   "pytest>=7.4.4",
@@ -53,12 +47,25 @@ test = [
   # "pytest-mock>=3.12.0",
 ]
 dev = [
-  # fix mypy/ruff versions to match `.pre-commit-config.yaml`
-  "mypy==1.14.1",
-  "ruff==0.9.2",
-  "pre-commit>=3.6.0",
-  "ipdb>=0.13.13",
+    "mypy==1.14.1",
+    "ruff==0.9.2",
+    "pre-commit>=3.6.0",
+    "ipdb>=0.13.13",
+    "tox>=4.54.0",
+    "tox-uv>=1.35.2",
 ]
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
+bump = true
 
 [tool.ruff.lint]
 select = ["ALL"]
@@ -96,12 +103,3 @@ filterwarnings = [
 [tool.mypy]
 plugins = []
 check_untyped_defs = true
-
-[tool.pdm]
-version = { source = "file", path = "httpx_curl_cffi/__init__.py" }
-
-[tool.pdm.build]
-excludes = ["tests/"]
-
-[tool.pdm.scripts]
-test = { shell = "pytest" }

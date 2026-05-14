@@ -1,4 +1,9 @@
-__version__ = "0.1.5"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("httpx-curl-cffi")
+except PackageNotFoundError:
+    __version__ = "0.0.0+unknown"
 
 from .transport import (
     AsyncCurlTransport,
@@ -20,4 +25,5 @@ __all__ = [
     "CurlTransport",
     "ExtraFingerprints",
     "ExtraFpDict",
+    "__version__",
 ]
