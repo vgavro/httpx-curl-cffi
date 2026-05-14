@@ -320,6 +320,19 @@ wheels = [
 ]
 
 [[package]]
+name = "httpcorexyz"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "h11" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/55/51/60ffabfde3a23b4dd37d97b7f78271e466ce9a1e719bf39d6b94ac59c10c/httpcorexyz-1.1.1.tar.gz", hash = "sha256:0b8dbbe8ffaccd20b7c755d92129f9fb04a23f2ef22b32ff82e2d1c7fcfee803", size = 96629, upload-time = "2026-05-08T08:36:25.192Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/f0/8597741d1455fc810c753d177120815925666a8c15f86e9cb8b6e5969479/httpcorexyz-1.1.1-py3-none-any.whl", hash = "sha256:58becd21f127c0a846813d0705f9e0c27c16c867bb436813667f569d4f0ba94e", size = 83392, upload-time = "2026-05-08T08:36:23.058Z" },
+]
+
+[[package]]
 name = "httpx"
 version = "0.28.1"
 source = { registry = "https://pypi.org/simple" }
@@ -353,6 +366,7 @@ dev = [
     { name = "tox-uv" },
 ]
 test = [
+    { name = "httpxyz" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-httpserver" },
@@ -376,10 +390,26 @@ dev = [
     { name = "tox-uv", specifier = ">=1.35.2" },
 ]
 test = [
+    { name = "httpxyz", specifier = ">=0.31.2" },
     { name = "pytest", specifier = ">=7.4.4" },
     { name = "pytest-asyncio", specifier = ">=0.23.3" },
     { name = "pytest-httpserver", specifier = ">=1.1.0" },
     { name = "trustme", specifier = ">=1.2.1" },
+]
+
+[[package]]
+name = "httpxyz"
+version = "0.31.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "certifi" },
+    { name = "httpcorexyz" },
+    { name = "idna" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/21/6a/700053e47397c1d7bfa05255e3414ece964b21da2c1f7b622306eabe4dac/httpxyz-0.31.2.tar.gz", hash = "sha256:da96c2f35c724023b9395b1df718f7d52d049b8424a0c919ca0fe2b64dce73a0", size = 149638, upload-time = "2026-05-08T13:21:13.686Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/65/d7/45f259608b8ce844a8a05c5a9f2e363e94d598d7a782d3ad2a7682c11605/httpxyz-0.31.2-py3-none-any.whl", hash = "sha256:1e8058b7324aaf875efb6b4cf5a5a423f4ac101fd4af515349fb4e1d3e4d4441", size = 76949, upload-time = "2026-05-08T13:21:12.471Z" },
 ]
 
 [[package]]

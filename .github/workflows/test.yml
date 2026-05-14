@@ -19,3 +19,4 @@ jobs:
           enable-cache: true
 
       - run: uvx --with tox-uv tox
+      - run: uvx --with tox-uv tox -- -p httpxyz
