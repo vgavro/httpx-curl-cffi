@@ -227,8 +227,10 @@ class BaseCurlTransport(Generic[SessionT]):
 
         # See https://github.com/lexiforest/curl_cffi/issues/345
         # curl is always using environ,
-        # We're explicitly setting NOPROXY option below
-        # to override proxy usage from environ.
+        # We're explicitly setting PROXY and NOPROXY options below
+        # to override proxy usage from environ (unless set in curl_options).
+        # Fixed the same way for trust_env=False in curl_cffi>=0.17
+        # (still needed before) https://github.com/lexiforest/curl_cffi/pull/867
         # With httpx it's expected that proxy environ
         # read by `httpx.Client` with trust_env=True (default),
         # and separate mounts created with separate transports.
@@ -244,17 +246,22 @@ class BaseCurlTransport(Generic[SessionT]):
         if proxy:
             if isinstance(proxy, str):
                 proxy = httpx.Proxy(url=proxy)
-
-            # """
-            # Setting the noproxy string to "" (an empty string)
-            # explicitly enables the proxy for all hostnames,
-            # even if there is an environment variable set for it.
-            # """
-            # https://curl.se/libcurl/c/CURLOPT_NOPROXY.html
-            curl_options[CurlOpt.NOPROXY] = ""
         else:
             proxy = None
-            curl_options[CurlOpt.NOPROXY] = "*"
+            # """
+            # Setting the proxy string to "" (an empty string)
+            # explicitly disables the use of a proxy,
+            # even if there is an environment variable set for it.
+            # """
+            # https://curl.se/libcurl/c/CURLOPT_PROXY.html
+            curl_options.setdefault(CurlOpt.PROXY, "")
+        # """
+        # Setting the noproxy string to "" (an empty string)
+        # explicitly enables the proxy for all hostnames,
+        # even if there is an environment variable set for it.
+        # """
+        # https://curl.se/libcurl/c/CURLOPT_NOPROXY.html
+        curl_options.setdefault(CurlOpt.NOPROXY, "")
 
         return {
             "debug": params.get("debug", False),
