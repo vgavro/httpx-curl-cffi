@@ -51,8 +51,8 @@ test = [
   "httpxyz>=0.31.2",
 ]
 dev = [
-    "mypy==1.14.1",
-    "ruff==0.9.2",
+    "mypy==2.4.1",
+    "ruff==0.17.6",
     "pre-commit>=3.6.0",
     "ipdb>=0.13.13",
     "tox>=4.54.0",
@@ -91,6 +91,9 @@ ignore = [
   # `Any` in `__exit__` and `__aexit__`
   # https://docs.astral.sh/ruff/rules/bad-exit-annotation/
   "PYI036",
+  # no copyright notices in files, see LICENSE
+  # https://docs.astral.sh/ruff/rules/missing-copyright-notice/
+  "CPY001",
 ]
 
 [tool.pytest.ini_options]

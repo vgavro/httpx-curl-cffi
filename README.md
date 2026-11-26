@@ -31,12 +31,14 @@ from httpx_curl_cffi import CurlTransport, AsyncCurlTransport, CurlOpt
 client = Client(transport=CurlTransport(impersonate="chrome", default_headers=True))
 client.get("https://tools.scrapfly.io/api/fp/ja3")
 
-async_client = AsyncClient(transport=AsyncCurlTransport(
-  impersonate="chrome",
-  default_headers=True,
-  # required for parallel requests, see curl_cffi issues below
-  curl_options={CurlOpt.FRESH_CONNECT: True}
-))
+async_client = AsyncClient(
+    transport=AsyncCurlTransport(
+        impersonate="chrome",
+        default_headers=True,
+        # required for parallel requests, see curl_cffi issues below
+        curl_options={CurlOpt.FRESH_CONNECT: True},
+    )
+)
 ```
 
 ## Proxy from environment variables
@@ -51,18 +53,20 @@ import httpx
 from httpx._utils import get_environment_proxies
 from httpx_curl_cffi import CurlTransport  # or AsyncCurlTransport
 
+
 def transport_factory(proxy: httpx.Proxy | None = None) -> httpx.BaseTransport:
     return CurlTransport(  # or AsyncCurlTransport
-      proxy=proxy,
-      verify=False,  # and other custom options
+        proxy=proxy,
+        verify=False,  # and other custom options
     )
+
 
 client = httpx.Client(  # or httpx.AsyncClient
     transport=transport_factory(),
     mounts={
         k: transport_factory(httpx.Proxy(url=v)) if v else None
         for k, v in get_environment_proxies().items()
-    }
+    },
 )
 ```
 

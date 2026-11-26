@@ -6,6 +6,7 @@ from typing import Any, TypeVar
 import httpx
 import pytest
 import trustme
+from typing_extensions import Self
 
 from httpx_curl_cffi import AsyncCurlTransport, CurlOpt, CurlTransport
 
@@ -32,7 +33,7 @@ class PolymorphClient(httpx.AsyncClient):
         else:
             raise TypeError("Unexpected transport")
 
-    async def __aenter__(self) -> "PolymorphClient":
+    async def __aenter__(self) -> Self:
         if isinstance(self._client, httpx.Client):
             self._client.__enter__()
         else:
