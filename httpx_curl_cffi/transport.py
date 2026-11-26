@@ -1,7 +1,7 @@
 import ssl
 import sys
 from asyncio import AbstractEventLoop
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Iterator, Sequence
 from datetime import timedelta
 from http.cookiejar import Cookie, CookieJar
 from pathlib import PurePath
@@ -82,7 +82,8 @@ _HTTPX_DEFAULT_HEADERS: list[tuple[str, str]] = list(
     httpx.Client(trust_env=False).headers.items(),
 )
 
-_CURL_ERRORS: dict[CurlECode, type[httpx.RequestError]] = {
+# NOTE: by int, as `CurlError.code` is `int | CurlECode` (`CurlECode` is `IntEnum`)
+_CURL_ERRORS: dict[int, type[httpx.RequestError]] = {
     CurlECode.UNSUPPORTED_PROTOCOL: httpx.ProtocolError,
     CurlECode.COULDNT_CONNECT: httpx.ConnectError,
     CurlECode.COULDNT_RESOLVE_HOST: httpx.ConnectError,
@@ -288,7 +289,9 @@ class BaseCurlTransport(Generic[SessionT]):
         }
 
     @staticmethod
-    def _create_headers(raw_headers: list[tuple[bytes, bytes | None]]) -> httpx.Headers:
+    def _create_headers(
+        raw_headers: Sequence[tuple[bytes, bytes | None]],
+    ) -> httpx.Headers:
         return httpx.Headers([(h, v or b"") for h, v in raw_headers])
 
     def _create_request_params(self, req: httpx.Request) -> dict[str, Any]:
@@ -371,7 +374,7 @@ class BaseCurlTransport(Generic[SessionT]):
 
 
 class CurlTransport(BaseCurlTransport[_SyncSession], httpx.BaseTransport):
-    _session_cls = _SyncSession
+    _session_cls: type[_SyncSession] = _SyncSession
     _stream_wrap_cls = CurlSyncByteStream
 
     def __init__(
@@ -404,7 +407,7 @@ class CurlTransport(BaseCurlTransport[_SyncSession], httpx.BaseTransport):
 
 
 class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], httpx.AsyncBaseTransport):
-    _session_cls = _AsyncSession
+    _session_cls: type[_AsyncSession] = _AsyncSession
     _stream_wrap_cls = CurlAsyncByteStream
 
     def __init__(
