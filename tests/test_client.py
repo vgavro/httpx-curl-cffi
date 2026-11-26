@@ -1,5 +1,11 @@
+import gzip
+import zlib
+from collections.abc import Callable
+
+import brotli  # type: ignore[import-untyped]
 import httpx
 import pytest
+import zstandard
 from httpx._client import BoundAsyncStream, BoundSyncStream
 from pytest_httpserver import HTTPServer
 
@@ -91,3 +97,51 @@ async def test_stream(httpserver: HTTPServer, client: PolymorphClient) -> None:
             assert isinstance(resp.stream, BoundAsyncStream)
             assert await resp.aread() == b"OK"
         assert resp.text == "OK"
+
+
+_ENCODERS: dict[str, Callable[[bytes], bytes]] = {
+    "gzip": gzip.compress,
+    "deflate": zlib.compress,
+    "br": brotli.compress,
+    "zstd": zstandard.compress,
+}
+
+
+@pytest.mark.parametrize("encoding", list(_ENCODERS))
+async def test_encoded(
+    httpserver: HTTPServer,
+    client: PolymorphClient,
+    encoding: str,
+) -> None:
+    httpserver.expect_request("/test").respond_with_data(
+        _ENCODERS[encoding](b"OK"),
+        200,
+        headers={"content-encoding": encoding},
+    )
+    resp = await client.get(httpserver.url_for("/test"))
+    resp.raise_for_status()
+    assert resp.headers["content-encoding"] == encoding
+    assert resp.text == "OK"
+
+
+@pytest.mark.parametrize("encoding", list(_ENCODERS))
+async def test_encoded_raw(
+    httpserver: HTTPServer,
+    client: PolymorphClient,
+    encoding: str,
+) -> None:
+    # raw content isn't decoded by curl, as by httpx transports, so responses
+    # may be created of it again (e.g. by transports wrapping this one)
+    encoded = _ENCODERS[encoding](b"OK")
+    httpserver.expect_request("/test").respond_with_data(
+        encoded,
+        200,
+        headers={"content-encoding": encoding},
+    )
+    async with client.stream("GET", httpserver.url_for("/test")) as resp:
+        if isinstance(resp.stream, BoundSyncStream):
+            raw = b"".join(resp.iter_raw())
+        else:
+            raw = b"".join([chunk async for chunk in resp.aiter_raw()])
+    assert raw == encoded
+    assert httpx.Response(200, headers=resp.headers, content=raw).text == "OK"

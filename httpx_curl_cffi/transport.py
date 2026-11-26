@@ -41,7 +41,6 @@ from curl_cffi.requests.session import (
 from curl_cffi.requests.session import (
     Session as _SyncSession,
 )
-from httpx._decoders import IdentityDecoder
 
 if TYPE_CHECKING:
     from curl_cffi.requests.impersonate import (
@@ -235,7 +234,11 @@ class BaseCurlTransport(Generic[SessionT]):
         # and separate mounts created with separate transports.
         assert not params.get("trust_env")
 
-        curl_options = params.get("curl_options") or {}
+        curl_options = dict(params.get("curl_options") or {})
+        # Content is decoded by httpx (as for its own transports) by
+        # `content-encoding` header, so raw content of responses is encoded.
+        # https://github.com/lexiforest/curl_cffi/issues/438
+        curl_options[CurlOpt.HTTP_CONTENT_DECODING] = 0
 
         proxy = params.get("proxy", None)
         if proxy:
@@ -269,7 +272,7 @@ class BaseCurlTransport(Generic[SessionT]):
             "akamai": params.get("akamai"),
             "extra_fp": params.get("extra_fp"),
             "default_headers": params.get("default_headers", False),
-            "curl_options": params.get("curl_options"),
+            "curl_options": curl_options,
             "curl_infos": params.get("curl_infos"),
             # NOTE: trust_env isn't working, see ticket above
             "trust_env": False,
@@ -334,12 +337,6 @@ class BaseCurlTransport(Generic[SessionT]):
                 },
             },
         )
-        # disable decompressing content based on `content-encoding` header,
-        # it's already decompressed by curl and curl interfrace
-        # doesn't provide raw content at all.
-        # https://github.com/lexiforest/curl_cffi/issues/438
-        resp._decoder = IdentityDecoder()  # noqa:SLF001
-
         http_version = CurlHttpVersion(_resp.http_version)
         if http_version in _CURL_HTTP_VERSIONS:
             resp.extensions["http_version"] = _CURL_HTTP_VERSIONS[http_version]
