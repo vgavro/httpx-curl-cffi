@@ -124,20 +124,66 @@ def _httpx_default_headers(httpx_: ModuleType) -> list[tuple[str, str]]:
 
 
 # NOTE: by int, as `CurlError.code` is `int | CurlECode` (`CurlECode` is `IntEnum`)
-# names of `httpx.RequestError` subclasses, as module depends on request
-_CURL_ERRORS: dict[int, str] = {
-    CurlECode.UNSUPPORTED_PROTOCOL: "ProtocolError",
-    CurlECode.COULDNT_CONNECT: "ConnectError",
+# names of `httpx.RequestError` subclasses, as module depends on request,
+# matching errors raised by httpx transports in the same cases (see tests);
+# too generic codes are mapped by libcurl error message substrings,
+# first matched, ending with "" as default (codes and messages differ by versions)
+_CURL_ERRORS: dict[int, str | dict[str, str]] = {
+    CurlECode.UNSUPPORTED_PROTOCOL: {
+        "not supported": "UnsupportedProtocol",
+        # unsupported HTTP version in response
+        "": "RemoteProtocolError",
+    },
+    CurlECode.COULDNT_CONNECT: {
+        # proxy responded to CONNECT not with 2xx (libcurl>=8.21 at least)
+        "CONNECT tunnel failed": "ProxyError",
+        "": "ConnectError",
+    },
     CurlECode.COULDNT_RESOLVE_HOST: "ConnectError",
-    CurlECode.COULDNT_RESOLVE_PROXY: "ProxyError",
+    # proxy connection errors are not `ProxyError` in httpx transports
+    CurlECode.COULDNT_RESOLVE_PROXY: "ConnectError",
+    CurlECode.PROXY: "ProxyError",
     CurlECode.SSL_CONNECT_ERROR: "ConnectError",
+    CurlECode.SSL_CERTPROBLEM: "ConnectError",
+    CurlECode.SSL_CIPHER: "ConnectError",
+    CurlECode.PEER_FAILED_VERIFICATION: "ConnectError",
+    CurlECode.SSL_CACERT_BADFILE: "ConnectError",
+    CurlECode.SSL_CRL_BADFILE: "ConnectError",
+    CurlECode.SSL_ISSUER_ERROR: "ConnectError",
+    CurlECode.SSL_PINNEDPUBKEYNOTMATCH: "ConnectError",
+    CurlECode.SSL_INVALIDCERTSTATUS: "ConnectError",
+    CurlECode.SSL_CLIENTCERT: "ConnectError",
+    CurlECode.ECH_REQUIRED: "ConnectError",
+    CurlECode.QUIC_CONNECT_ERROR: "ConnectError",
+    # NOTE: READ_ERROR and WRITE_ERROR are about request content and
+    # response callback, not network, still the closest
     CurlECode.READ_ERROR: "ReadError",
-    CurlECode.RECV_ERROR: "ReadError",
     CurlECode.WRITE_ERROR: "WriteError",
-    # peer closed connection before complete body, as raised by httpx transports
+    CurlECode.RECV_ERROR: {
+        # proxy responded to CONNECT not with 2xx (libcurl 8.15)
+        "CONNECT tunnel failed": "ProxyError",
+        # invalid chunked encoding in response
+        "chunk": "RemoteProtocolError",
+        "": "ReadError",
+    },
+    CurlECode.SEND_ERROR: "WriteError",
+    CurlECode.WEIRD_SERVER_REPLY: "RemoteProtocolError",
+    CurlECode.GOT_NOTHING: "RemoteProtocolError",
+    # peer closed connection before complete body
     CurlECode.PARTIAL_FILE: "RemoteProtocolError",
+    CurlECode.HTTP2: "RemoteProtocolError",
+    CurlECode.HTTP2_STREAM: "RemoteProtocolError",
+    CurlECode.HTTP3: "RemoteProtocolError",
     CurlECode.BAD_CONTENT_ENCODING: "DecodingError",
-    CurlECode.OPERATION_TIMEDOUT: "TimeoutException",
+    CurlECode.OPERATION_TIMEDOUT: {
+        "Resolving timed out": "ConnectTimeout",
+        "Connection timed out": "ConnectTimeout",
+        # libcurl 8.7
+        "Failed to connect": "ConnectTimeout",
+        "SSL connection timeout": "ConnectTimeout",
+        # NOTE: write timeouts are indistinguishable (as "Operation too slow")
+        "": "ReadTimeout",
+    },
 }
 
 _CURL_HTTP_VERSIONS: dict[CurlHttpVersion, bytes] = {
@@ -151,9 +197,15 @@ _CURL_HTTP_VERSIONS: dict[CurlHttpVersion, bytes] = {
 
 def _create_error(req: _Request, exc: _RequestError) -> Exception:
     assert exc.code, "Curl error code undefined"
-    error_cls = getattr(_httpx_of(req), _CURL_ERRORS.get(exc.code, "RequestError"))
+    msg = exc.args[0]
+    names = _CURL_ERRORS.get(exc.code, "RequestError")
+    if isinstance(names, dict):
+        name = next(name for substr, name in names.items() if substr in msg)
+    else:
+        name = names
+    error_cls = getattr(_httpx_of(req), name)
     # NOTE: we're loosing curl error code here
-    return error_cls(exc.args[0], request=req)  # type: ignore[no-any-return]
+    return error_cls(msg, request=req)  # type: ignore[no-any-return]
 
 
 class _DummyCookieJar(CookieJar):
@@ -396,6 +448,11 @@ class BaseCurlTransport(Generic[SessionT]):
         return [(h, v or b"") for h, v in raw_headers]
 
     def _create_request_params(self, req: _Request) -> dict[str, Any]:
+        # as httpx transports, while curl supports more protocols
+        if req.url.scheme not in {"http", "https"}:
+            msg = f"Request URL has an unsupported protocol '{req.url.scheme}://'."
+            raise _httpx_of(req).UnsupportedProtocol(msg, request=req)
+
         if self._session.default_headers:
             # drop httpx default headers
             for header, value in _httpx_default_headers(_httpx_of(req)):
