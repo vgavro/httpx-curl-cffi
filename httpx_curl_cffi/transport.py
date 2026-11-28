@@ -480,12 +480,13 @@ class CurlTransport(BaseCurlTransport[_SyncSession], _BaseTransport):
 
     @overload
     def handle_request(self, request: httpx.Request) -> httpx.Response: ...
-    # NOTE: never matched when httpx2 isn't installed (`Any` type)
+    # NOTE: never matched when httpx2 isn't installed (`Any` type),
+    # quoted as annotations are evaluated on definition in python<3.14
     @overload
     def handle_request(  # type: ignore[overload-cannot-match, unused-ignore]
         self,
-        request: httpx2.Request,
-    ) -> httpx2.Response: ...
+        request: "httpx2.Request",
+    ) -> "httpx2.Response": ...
     def handle_request(self, request: _Request) -> _Response:
         request.read()
         try:
@@ -527,12 +528,13 @@ class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], _AsyncBaseTransport):
 
     @overload
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response: ...
-    # NOTE: never matched when httpx2 isn't installed (`Any` type)
+    # NOTE: never matched when httpx2 isn't installed (`Any` type),
+    # quoted as annotations are evaluated on definition in python<3.14
     @overload
     async def handle_async_request(  # type: ignore[overload-cannot-match, unused-ignore]
         self,
-        request: httpx2.Request,
-    ) -> httpx2.Response: ...
+        request: "httpx2.Request",
+    ) -> "httpx2.Response": ...
     async def handle_async_request(self, request: _Request) -> _Response:
         await request.aread()
         try:

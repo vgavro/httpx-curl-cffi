@@ -19,4 +19,4 @@ jobs:
           enable-cache: true
 
       # httpx2 requires python>=3.11
-      - run: uvx --with tox-uv tox ${{ matrix.python-version == '3.10' && '--skip-env httpx2' || '' }}
+      - run: uvx --with tox-uv tox ${{ matrix.python-version == '3.10' && '--skip-env ".*httpx2"' || '' }}
