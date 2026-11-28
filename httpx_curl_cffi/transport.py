@@ -134,6 +134,8 @@ _CURL_ERRORS: dict[int, str] = {
     CurlECode.READ_ERROR: "ReadError",
     CurlECode.RECV_ERROR: "ReadError",
     CurlECode.WRITE_ERROR: "WriteError",
+    # peer closed connection before complete body, as raised by httpx transports
+    CurlECode.PARTIAL_FILE: "RemoteProtocolError",
     CurlECode.BAD_CONTENT_ENCODING: "DecodingError",
     CurlECode.OPERATION_TIMEDOUT: "TimeoutException",
 }
@@ -145,6 +147,13 @@ _CURL_HTTP_VERSIONS: dict[CurlHttpVersion, bytes] = {
     CurlHttpVersion.V2_0: b"HTTP/2",
     CurlHttpVersion.V3: b"HTTP/3",
 }
+
+
+def _create_error(req: _Request, exc: _RequestError) -> Exception:
+    assert exc.code, "Curl error code undefined"
+    error_cls = getattr(_httpx_of(req), _CURL_ERRORS.get(exc.code, "RequestError"))
+    # NOTE: we're loosing curl error code here
+    return error_cls(exc.args[0], request=req)  # type: ignore[no-any-return]
 
 
 class _DummyCookieJar(CookieJar):
@@ -193,9 +202,11 @@ else:
 
 
 class CurlAsyncByteStream(_AsyncByteStream):
+    _req: _Request
     _resp: _CurlResponse
 
-    def __init__(self, resp: _CurlResponse) -> None:
+    def __init__(self, req: _Request, resp: _CurlResponse) -> None:
+        self._req = req
         self._resp = resp
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
@@ -203,17 +214,22 @@ class CurlAsyncByteStream(_AsyncByteStream):
             # stream mode disabled
             yield self._resp.content
             return
-        async for data in self._resp.aiter_content():
-            yield data
+        try:
+            async for data in self._resp.aiter_content():
+                yield data
+        except _RequestError as _exc:
+            raise _create_error(self._req, _exc) from _exc
 
     async def aclose(self) -> None:
         await self._resp.aclose()
 
 
 class CurlSyncByteStream(_SyncByteStream):
+    _req: _Request
     _resp: _CurlResponse
 
-    def __init__(self, resp: _CurlResponse) -> None:
+    def __init__(self, req: _Request, resp: _CurlResponse) -> None:
+        self._req = req
         self._resp = resp
 
     def __iter__(self) -> Iterator[bytes]:
@@ -221,7 +237,10 @@ class CurlSyncByteStream(_SyncByteStream):
             # stream mode disabled
             yield self._resp.content
             return
-        yield from self._resp.iter_content()
+        try:
+            yield from self._resp.iter_content()
+        except _RequestError as _exc:
+            raise _create_error(self._req, _exc) from _exc
 
     def close(self) -> None:
         self._resp.close()
@@ -424,7 +443,7 @@ class BaseCurlTransport(Generic[SessionT]):
             status_code=_resp.status_code,
             request=req,
             headers=self._create_headers(_resp.headers.raw),
-            stream=self._stream_wrap_cls(_resp),
+            stream=self._stream_wrap_cls(req, _resp),
             extensions={
                 "curl": {
                     "response": _resp,
@@ -447,16 +466,6 @@ class BaseCurlTransport(Generic[SessionT]):
         else:
             resp.elapsed = timedelta(seconds=_resp.elapsed)
         return resp
-
-    def _create_error(
-        self,
-        req: _Request,
-        exc: _RequestError,
-    ) -> Exception:
-        assert exc.code, "Curl error code undefined"
-        error_cls = getattr(_httpx_of(req), _CURL_ERRORS.get(exc.code, "RequestError"))
-        # NOTE: we're loosing curl error code here
-        return error_cls(exc.args[0], request=req)  # type: ignore[no-any-return]
 
 
 class CurlTransport(BaseCurlTransport[_SyncSession], _BaseTransport):
@@ -498,7 +507,7 @@ class CurlTransport(BaseCurlTransport[_SyncSession], _BaseTransport):
             )
             return self._create_response(request, _resp)
         except _RequestError as _exc:
-            raise self._create_error(request, _exc) from _exc
+            raise _create_error(request, _exc) from _exc
 
     def close(self) -> None:
         self._session.close()
@@ -543,7 +552,7 @@ class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], _AsyncBaseTransport):
             )
             return self._create_response(request, _resp)
         except _RequestError as _exc:
-            raise self._create_error(request, _exc) from _exc
+            raise _create_error(request, _exc) from _exc
 
     async def aclose(self) -> None:
         await self._session.close()

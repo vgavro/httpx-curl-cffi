@@ -1,12 +1,16 @@
 import gzip
+import socket
+import struct
+import threading
 import zlib
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import brotli  # type: ignore[import-untyped]
 import pytest
 import zstandard
 from pytest_httpserver import HTTPServer
 
+from httpx_curl_cffi.transport import _CURL_ERRORS
 from tests.conftest import PolymorphClient, httpx
 
 HTTPX_USER_AGENT = httpx.Client().headers["user-agent"]
@@ -143,3 +147,81 @@ async def test_encoded_raw(
             raw = b"".join([chunk async for chunk in resp.aiter_raw()])
     assert raw == encoded
     assert httpx.Response(200, headers=resp.headers, content=raw).text == "OK"
+
+
+@pytest.mark.parametrize(
+    "name",
+    sorted({*_CURL_ERRORS.values(), "RequestError"}),
+)
+def test_error_classes_exist(name: str) -> None:
+    # resolved by name of the request's module, see `_create_error`
+    error_cls = getattr(httpx, name)
+    assert issubclass(error_cls, httpx.RequestError)
+
+
+async def test_connect_error(client: PolymorphClient) -> None:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    with pytest.raises(httpx.ConnectError):
+        await client.get(f"http://127.0.0.1:{port}/")
+
+
+@pytest.fixture(
+    params=[
+        # closing connection gracefully (FIN)
+        ("fin", httpx.RemoteProtocolError),
+        # resetting connection (RST, by zero linger timeout)
+        ("rst", httpx.ReadError),
+    ],
+    ids=["fin", "rst"],
+)
+def incomplete(
+    request: pytest.FixtureRequest,
+) -> Iterator[tuple[str, type[httpx.TransportError]]]:
+    # responds with incomplete body, yields url and error expected,
+    # the same as raised by httpx transports
+    close, error_cls = request.param
+
+    def serve(server: socket.socket) -> None:
+        conn, _ = server.accept()
+        with conn:
+            conn.recv(65536)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nOK")
+            if close == "rst":
+                linger = struct.pack("ii", 1, 0)
+                conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, linger)
+
+    with socket.create_server(("127.0.0.1", 0)) as server:
+        threading.Thread(target=serve, args=(server,), daemon=True).start()
+        yield f"http://127.0.0.1:{server.getsockname()[1]}/", error_cls
+
+
+async def _stream_read(client: PolymorphClient, url: str) -> None:
+    async with client.stream("GET", url) as resp:
+        if isinstance(resp.stream, httpx.SyncByteStream):
+            resp.read()
+        else:
+            await resp.aread()
+
+
+async def test_incomplete_body_error(
+    client: PolymorphClient,
+    incomplete: tuple[str, type[httpx.TransportError]],
+) -> None:
+    # raised on reading body, not on sending request
+    url, error_cls = incomplete
+    with pytest.raises(error_cls) as exc:
+        await _stream_read(client, url)
+    assert exc.value.request.url == url
+
+
+async def test_incomplete_body_error_not_streamed(
+    client: PolymorphClient,
+    incomplete: tuple[str, type[httpx.TransportError]],
+) -> None:
+    # transports always stream, so the same is raised on reading body by client
+    url, error_cls = incomplete
+    with pytest.raises(error_cls) as exc:
+        await client.get(url)
+    assert exc.value.request.url == url
