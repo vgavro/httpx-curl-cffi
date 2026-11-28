@@ -18,5 +18,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - run: uvx --with tox-uv tox
-      - run: uvx --with tox-uv tox -- -p httpxyz
+      # httpx2 requires python>=3.11
+      - run: uvx --with tox-uv tox ${{ matrix.python-version == '3.10' && '--skip-env httpx2' || '' }}

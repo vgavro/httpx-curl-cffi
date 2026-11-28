@@ -1,7 +1,14 @@
+import importlib
+import importlib.util
 import ssl
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 from typing import Any, TypeVar
+
+# httpx2 (installed by tox httpx2 factor) is tested as `httpx`, aliasing
+# must happen before anything imports httpx (raises RuntimeError otherwise)
+if importlib.util.find_spec("httpx2"):
+    importlib.import_module("httpx2").alias_httpx()
 
 import httpx
 import pytest
