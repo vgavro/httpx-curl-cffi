@@ -3,13 +3,11 @@ import zlib
 from collections.abc import Callable
 
 import brotli  # type: ignore[import-untyped]
-import httpx
 import pytest
 import zstandard
-from httpx._client import BoundAsyncStream, BoundSyncStream
 from pytest_httpserver import HTTPServer
 
-from tests.conftest import PolymorphClient
+from tests.conftest import PolymorphClient, httpx
 
 HTTPX_USER_AGENT = httpx.Client().headers["user-agent"]
 
@@ -91,10 +89,10 @@ async def test_stream(httpserver: HTTPServer, client: PolymorphClient) -> None:
         httpserver.url_for("/test"),
     ) as resp:
         resp.raise_for_status()
-        if isinstance(resp.stream, BoundSyncStream):
+        if isinstance(resp.stream, httpx.SyncByteStream):
             assert resp.read() == b"OK"
         else:
-            assert isinstance(resp.stream, BoundAsyncStream)
+            assert isinstance(resp.stream, httpx.AsyncByteStream)
             assert await resp.aread() == b"OK"
         assert resp.text == "OK"
 
@@ -139,7 +137,7 @@ async def test_encoded_raw(
         headers={"content-encoding": encoding},
     )
     async with client.stream("GET", httpserver.url_for("/test")) as resp:
-        if isinstance(resp.stream, BoundSyncStream):
+        if isinstance(resp.stream, httpx.SyncByteStream):
             raw = b"".join(resp.iter_raw())
         else:
             raw = b"".join([chunk async for chunk in resp.aiter_raw()])

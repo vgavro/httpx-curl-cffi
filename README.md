@@ -41,6 +41,31 @@ async_client = AsyncClient(
 )
 ```
 
+## httpx2
+
+[httpx2](https://github.com/pydantic/httpx2) is supported along with httpx
+(installed as dependency) without any changes, the same transports are
+accepted by `httpx2.Client` and `httpx2.AsyncClient` (by type checkers too):
+
+```shell
+pip install httpx-curl-cffi[httpx2]
+```
+
+The `httpx2` extra installs `httpx2[brotli,zstd]` - decoders of encodings
+accepted by impersonated browsers
+(e.g. chrome sends `Accept-Encoding: gzip, deflate, br, zstd`).
+
+```python
+from httpx2 import Client
+from httpx_curl_cffi import CurlTransport
+
+client = Client(transport=CurlTransport(impersonate="chrome", default_headers=True))
+```
+
+Responses and errors are created of the request's module,
+e.g. `httpx2.ConnectError` raised for `httpx2.Client`.
+httpx aliased by `httpx2.alias_httpx()` is supported as well.
+
 ## Proxy from environment variables
 
 Note that `httpx.Client` and `httpx.AsyncClient`

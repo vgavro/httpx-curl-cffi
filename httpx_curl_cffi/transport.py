@@ -3,16 +3,20 @@ import sys
 from asyncio import AbstractEventLoop
 from collections.abc import AsyncIterator, Iterator, Sequence
 from datetime import timedelta
+from functools import cache
 from http.cookiejar import Cookie, CookieJar
 from pathlib import PurePath
+from types import ModuleType
 from typing import (
     TYPE_CHECKING,
     Any,
     ClassVar,
     Generic,
     Literal,
+    TypeAlias,
     TypedDict,
     TypeVar,
+    overload,
 )
 
 if sys.version_info < (3, 11):
@@ -22,7 +26,7 @@ else:
 
 import httpx
 from curl_cffi import CurlECode, CurlHttpVersion, CurlInfo, CurlOpt
-from curl_cffi.requests import Response as _Response
+from curl_cffi.requests import Response as _CurlResponse
 from curl_cffi.requests.impersonate import (
     ExtraFingerprints,
     ExtraFpDict,
@@ -41,6 +45,18 @@ from curl_cffi.requests.session import (
 from curl_cffi.requests.session import (
     Session as _SyncSession,
 )
+
+# Transports are compatible with both httpx and httpx2 (if installed),
+# `httpx.Client` and `httpx2.Client` are accepted (by type checkers too)
+# as transports are subclasses of both, responses and errors are created
+# of the same module as request (also httpx aliased by `httpx2.alias_httpx()`).
+if TYPE_CHECKING:
+    import httpx2  # type: ignore[import-not-found, unused-ignore]
+else:
+    try:
+        import httpx2
+    except ImportError:
+        httpx2 = None
 
 if TYPE_CHECKING:
     from curl_cffi.requests.impersonate import (
@@ -78,22 +94,44 @@ else:
         from curl_cffi.requests.errors import RequestsError as _RequestError
 
 
-_HTTPX_DEFAULT_HEADERS: list[tuple[str, str]] = list(
-    httpx.Client(trust_env=False).headers.items(),
-)
+_Request: TypeAlias = "httpx.Request | httpx2.Request"
+_Response: TypeAlias = "httpx.Response | httpx2.Response"
+
+if TYPE_CHECKING:
+    _Proxy: TypeAlias = httpx.Proxy | httpx2.Proxy
+else:
+    _Proxy = httpx.Proxy | httpx2.Proxy if httpx2 else httpx.Proxy
+
+
+def _bases(*bases: type | None) -> tuple[type, ...]:
+    # deduplicated, as httpx is httpx2 when aliased by `httpx2.alias_httpx()`
+    return tuple(dict.fromkeys(base for base in bases if base))
+
+
+def _httpx_of(request: _Request) -> ModuleType:
+    if httpx2 and isinstance(request, httpx2.Request):
+        return httpx2
+    return httpx
+
+
+@cache
+def _httpx_default_headers(httpx_: ModuleType) -> list[tuple[str, str]]:
+    return list(httpx_.Client(trust_env=False).headers.items())
+
 
 # NOTE: by int, as `CurlError.code` is `int | CurlECode` (`CurlECode` is `IntEnum`)
-_CURL_ERRORS: dict[int, type[httpx.RequestError]] = {
-    CurlECode.UNSUPPORTED_PROTOCOL: httpx.ProtocolError,
-    CurlECode.COULDNT_CONNECT: httpx.ConnectError,
-    CurlECode.COULDNT_RESOLVE_HOST: httpx.ConnectError,
-    CurlECode.COULDNT_RESOLVE_PROXY: httpx.ProxyError,
-    CurlECode.SSL_CONNECT_ERROR: httpx.ConnectError,
-    CurlECode.READ_ERROR: httpx.ReadError,
-    CurlECode.RECV_ERROR: httpx.ReadError,
-    CurlECode.WRITE_ERROR: httpx.WriteError,
-    CurlECode.BAD_CONTENT_ENCODING: httpx.DecodingError,
-    CurlECode.OPERATION_TIMEDOUT: httpx.TimeoutException,
+# names of `httpx.RequestError` subclasses, as module depends on request
+_CURL_ERRORS: dict[int, str] = {
+    CurlECode.UNSUPPORTED_PROTOCOL: "ProtocolError",
+    CurlECode.COULDNT_CONNECT: "ConnectError",
+    CurlECode.COULDNT_RESOLVE_HOST: "ConnectError",
+    CurlECode.COULDNT_RESOLVE_PROXY: "ProxyError",
+    CurlECode.SSL_CONNECT_ERROR: "ConnectError",
+    CurlECode.READ_ERROR: "ReadError",
+    CurlECode.RECV_ERROR: "ReadError",
+    CurlECode.WRITE_ERROR: "WriteError",
+    CurlECode.BAD_CONTENT_ENCODING: "DecodingError",
+    CurlECode.OPERATION_TIMEDOUT: "TimeoutException",
 }
 
 _CURL_HTTP_VERSIONS: dict[CurlHttpVersion, bytes] = {
@@ -110,10 +148,50 @@ class _DummyCookieJar(CookieJar):
         return
 
 
-class CurlAsyncByteStream(httpx.AsyncByteStream):
-    _resp: _Response
+if TYPE_CHECKING:
+    # NOTE: base classes of httpx and httpx2 are not compatible for type checkers
+    # (different request and response types), still methods are overloaded
 
-    def __init__(self, resp: _Response) -> None:
+    class _AsyncByteStream(httpx.AsyncByteStream, httpx2.AsyncByteStream): ...
+
+    class _SyncByteStream(httpx.SyncByteStream, httpx2.SyncByteStream): ...
+
+    class _BaseTransport(  # type: ignore[misc]
+        httpx.BaseTransport,
+        httpx2.BaseTransport,
+    ): ...
+
+    class _AsyncBaseTransport(  # type: ignore[misc]
+        httpx.AsyncBaseTransport,
+        httpx2.AsyncBaseTransport,
+    ): ...
+
+else:
+
+    class _AsyncByteStream(
+        *_bases(httpx.AsyncByteStream, httpx2.AsyncByteStream if httpx2 else None),
+    ): ...
+
+    class _SyncByteStream(
+        *_bases(httpx.SyncByteStream, httpx2.SyncByteStream if httpx2 else None),
+    ): ...
+
+    class _BaseTransport(
+        *_bases(httpx.BaseTransport, httpx2.BaseTransport if httpx2 else None),
+    ): ...
+
+    class _AsyncBaseTransport(
+        *_bases(
+            httpx.AsyncBaseTransport,
+            httpx2.AsyncBaseTransport if httpx2 else None,
+        ),
+    ): ...
+
+
+class CurlAsyncByteStream(_AsyncByteStream):
+    _resp: _CurlResponse
+
+    def __init__(self, resp: _CurlResponse) -> None:
         self._resp = resp
 
     async def __aiter__(self) -> AsyncIterator[bytes]:
@@ -128,10 +206,10 @@ class CurlAsyncByteStream(httpx.AsyncByteStream):
         await self._resp.aclose()
 
 
-class CurlSyncByteStream(httpx.SyncByteStream):
-    _resp: _Response
+class CurlSyncByteStream(_SyncByteStream):
+    _resp: _CurlResponse
 
-    def __init__(self, resp: _Response) -> None:
+    def __init__(self, resp: _CurlResponse) -> None:
         self._resp = resp
 
     def __iter__(self) -> Iterator[bytes]:
@@ -171,7 +249,7 @@ class CurlTransportParams(TypedDict, total=False):
     ## still it's request parameters in `curl_cffi.requests.Session`
     ## and we may override them in `Request.extensions`
 
-    proxy: str | httpx.Proxy | None
+    proxy: str | _Proxy | None
 
     verify: bool
     # Deprecated with httpx if favor of passing `verify` as `ssl.SSLContext`,
@@ -291,13 +369,13 @@ class BaseCurlTransport(Generic[SessionT]):
     @staticmethod
     def _create_headers(
         raw_headers: Sequence[tuple[bytes, bytes | None]],
-    ) -> httpx.Headers:
-        return httpx.Headers([(h, v or b"") for h, v in raw_headers])
+    ) -> list[tuple[bytes, bytes]]:
+        return [(h, v or b"") for h, v in raw_headers]
 
-    def _create_request_params(self, req: httpx.Request) -> dict[str, Any]:
+    def _create_request_params(self, req: _Request) -> dict[str, Any]:
         if self._session.default_headers:
             # drop httpx default headers
-            for header, value in _HTTPX_DEFAULT_HEADERS:
+            for header, value in _httpx_default_headers(_httpx_of(req)):
                 if req.headers.get(header) == value:
                     req.headers.pop(header, None)
 
@@ -326,16 +404,19 @@ class BaseCurlTransport(Generic[SessionT]):
 
     def _create_response(
         self,
-        req: httpx.Request,
-        _resp: _Response,
-    ) -> httpx.Response:
+        req: _Request,
+        _resp: _CurlResponse,
+    ) -> Any:
+        httpx_ = _httpx_of(req)
         # TODO: curl_cffi has always empty headers in `_resp.request.headers`
         # https://github.com/lexiforest/curl_cffi/issues/368
         # especially needed for cases when `_session.default_headers` was used
         if _resp.request and _resp.request.headers:
-            req.headers = self._create_headers(_resp.request.headers.raw)
+            req.headers = httpx_.Headers(
+                self._create_headers(_resp.request.headers.raw),
+            )
 
-        resp = httpx.Response(
+        resp = httpx_.Response(
             status_code=_resp.status_code,
             request=req,
             headers=self._create_headers(_resp.headers.raw),
@@ -365,15 +446,16 @@ class BaseCurlTransport(Generic[SessionT]):
 
     def _create_error(
         self,
-        req: httpx.Request,
+        req: _Request,
         exc: _RequestError,
-    ) -> httpx.RequestError:
+    ) -> Exception:
         assert exc.code, "Curl error code undefined"
+        error_cls = getattr(_httpx_of(req), _CURL_ERRORS.get(exc.code, "RequestError"))
         # NOTE: we're loosing curl error code here
-        return _CURL_ERRORS.get(exc.code, httpx.RequestError)(exc.args[0], request=req)
+        return error_cls(exc.args[0], request=req)  # type: ignore[no-any-return]
 
 
-class CurlTransport(BaseCurlTransport[_SyncSession], httpx.BaseTransport):
+class CurlTransport(BaseCurlTransport[_SyncSession], _BaseTransport):
     _session_cls: type[_SyncSession] = _SyncSession
     _stream_wrap_cls = CurlSyncByteStream
 
@@ -392,7 +474,15 @@ class CurlTransport(BaseCurlTransport[_SyncSession], httpx.BaseTransport):
             **self._create_session_params(kwargs),
         )
 
-    def handle_request(self, request: httpx.Request) -> httpx.Response:
+    @overload
+    def handle_request(self, request: httpx.Request) -> httpx.Response: ...
+    # NOTE: never matched when httpx2 isn't installed (`Any` type)
+    @overload
+    def handle_request(  # type: ignore[overload-cannot-match, unused-ignore]
+        self,
+        request: httpx2.Request,
+    ) -> httpx2.Response: ...
+    def handle_request(self, request: _Request) -> _Response:
         request.read()
         try:
             _resp = self._session.request(
@@ -406,7 +496,7 @@ class CurlTransport(BaseCurlTransport[_SyncSession], httpx.BaseTransport):
         self._session.close()
 
 
-class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], httpx.AsyncBaseTransport):
+class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], _AsyncBaseTransport):
     _session_cls: type[_AsyncSession] = _AsyncSession
     _stream_wrap_cls = CurlAsyncByteStream
 
@@ -428,7 +518,15 @@ class AsyncCurlTransport(BaseCurlTransport[_AsyncSession], httpx.AsyncBaseTransp
             **self._create_session_params(kwargs),
         )
 
-    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+    @overload
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response: ...
+    # NOTE: never matched when httpx2 isn't installed (`Any` type)
+    @overload
+    async def handle_async_request(  # type: ignore[overload-cannot-match, unused-ignore]
+        self,
+        request: httpx2.Request,
+    ) -> httpx2.Response: ...
+    async def handle_async_request(self, request: _Request) -> _Response:
         await request.aread()
         try:
             _resp = await self._session.request(

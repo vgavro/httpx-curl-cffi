@@ -1,16 +1,22 @@
 import importlib
-import importlib.util
+import os
 import ssl
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
-# httpx2 (installed by tox httpx2 factor) is tested as `httpx`, aliasing
-# must happen before anything imports httpx (raises RuntimeError otherwise)
-if importlib.util.find_spec("httpx2"):
+# httpx module tested, set by tox factors, imported by tests from here:
+# `TEST_HTTPX=httpx2` tests `httpx2.Client` with transports (as is),
+# `TEST_HTTPX_ALIAS=1` tests httpx aliased by `httpx2.alias_httpx()`,
+# which must happen before anything imports httpx (raises RuntimeError otherwise)
+if os.environ.get("TEST_HTTPX_ALIAS"):
     importlib.import_module("httpx2").alias_httpx()
 
-import httpx
+if TYPE_CHECKING:
+    import httpx
+else:
+    httpx = importlib.import_module(os.environ.get("TEST_HTTPX", "httpx"))
+
 import pytest
 import trustme
 from typing_extensions import Self

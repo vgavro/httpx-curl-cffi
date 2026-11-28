@@ -38,6 +38,10 @@ dependencies = [
 ]
 requires-python = ">=3.10"
 
+[project.optional-dependencies]
+# httpx2 (python>=3.11) is supported along with httpx, see README
+httpx2 = ['httpx2[brotli,zstd]>=2.16.2; python_version >= "3.11"']
+
 [project.urls]
 Homepage = "https://github.com/vgavro/httpx-curl-cffi"
 Repository = "https://github.com/vgavro/httpx-curl-cffi"
@@ -57,6 +61,8 @@ dev = [
     "ipdb>=0.13.13",
     "tox>=4.54.0",
     "tox-uv>=1.35.2",
+    # type checking of httpx2 compatibility
+    'httpx2[brotli,zstd]>=2.16.2; python_version >= "3.11"',
 ]
 
 [build-system]
