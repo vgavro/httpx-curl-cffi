@@ -16,6 +16,7 @@ from typing import (
     TypeAlias,
     TypedDict,
     TypeVar,
+    cast,
     overload,
 )
 
@@ -25,16 +26,18 @@ else:
     from typing import Unpack
 
 import httpx
-from curl_cffi import CurlECode, CurlHttpVersion, CurlInfo, CurlOpt
+from curl_cffi import (
+    AsyncCurl,
+    Curl,
+    CurlECode,
+    CurlHttpVersion,
+    CurlInfo,
+    CurlOpt,
+)
 from curl_cffi.requests import Response as _CurlResponse
 from curl_cffi.requests.impersonate import (
     ExtraFingerprints,
     ExtraFpDict,
-)
-from curl_cffi.requests.session import (
-    AsyncCurl,
-    Curl,
-    ThreadType,
 )
 from curl_cffi.requests.session import (
     AsyncSession as _AsyncSession,
@@ -45,6 +48,7 @@ from curl_cffi.requests.session import (
 from curl_cffi.requests.session import (
     Session as _SyncSession,
 )
+from curl_cffi.requests.session import ThreadType
 
 # Transports are compatible with both httpx and httpx2 (if installed),
 # `httpx.Client` and `httpx2.Client` are accepted (by type checkers too)
@@ -485,8 +489,11 @@ class CurlTransport(BaseCurlTransport[_SyncSession], _BaseTransport):
     def handle_request(self, request: _Request) -> _Response:
         request.read()
         try:
-            _resp = self._session.request(
-                **self._create_request_params(request),
+            # NOTE: cast as `Response | None` inferred by pyright
+            # of unannotated `Session.request` in curl_cffi 0.15
+            _resp = cast(
+                "_CurlResponse",
+                self._session.request(**self._create_request_params(request)),
             )
             return self._create_response(request, _resp)
         except _RequestError as _exc:

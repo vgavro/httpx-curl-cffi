@@ -56,6 +56,7 @@ test = [
 ]
 dev = [
     "mypy==2.4.1",
+    "pyright==1.1.414",
     "ruff==0.17.6",
     "pre-commit>=3.6.0",
     "ipdb>=0.13.13",
@@ -112,6 +113,12 @@ filterwarnings = [
   # https://docs.python.org/3/library/warnings.html#warning-filter
   "error",
 ]
+
+[tool.pyright]
+# https://microsoft.github.io/pyright/#/configuration
+include = ["httpx_curl_cffi", "tests"]
+venvPath = "."
+venv = ".venv"
 
 [tool.mypy]
 plugins = []

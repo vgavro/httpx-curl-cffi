@@ -32,3 +32,15 @@ repos:
     rev: v2.4.1
     hooks:
       - id: mypy
+
+  # in project venv (unlike isolated mypy above), as pyright requires
+  # installed dependencies to resolve imports (tests/typing_check.py of httpx2)
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run --all-groups pyright
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+        require_serial: true
